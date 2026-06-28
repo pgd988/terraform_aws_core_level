@@ -174,6 +174,7 @@ resource "aws_iam_role_policy" "github_actions_terraform_plan" {
           "route53:List*",
           "ssm:GetParameter*",
           "ssm:DescribeParameters",
+          "ssm:ListTagsForResource",
         ]
         Resource = "*"
       },
