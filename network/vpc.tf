@@ -90,16 +90,67 @@ resource "aws_network_acl" "main" {
   }
 }
 
-# NACL Egress Rules - Allow All
-resource "aws_network_acl_rule" "egress_allow_all" {
+# NACL Egress Rules – explicit minimal set (replaces unrestricted all-protocol rule)
+
+# HTTPS outbound (AWS APIs, package repos, etc.)
+resource "aws_network_acl_rule" "egress_https" {
   network_acl_id = aws_network_acl.main.id
   rule_number    = 100
   egress         = true
-  protocol       = "-1"
+  protocol       = "tcp"
   rule_action    = "allow"
   cidr_block     = "0.0.0.0/0"
-  from_port      = 0
-  to_port        = 0
+  from_port      = 443
+  to_port        = 443
+}
+
+# HTTP outbound (package repos / redirects)
+resource "aws_network_acl_rule" "egress_http" {
+  network_acl_id = aws_network_acl.main.id
+  rule_number    = 110
+  egress         = true
+  protocol       = "tcp"
+  rule_action    = "allow"
+  cidr_block     = "0.0.0.0/0"
+  from_port      = 80
+  to_port        = 80
+}
+
+# DNS outbound – TCP
+resource "aws_network_acl_rule" "egress_dns_tcp" {
+  network_acl_id = aws_network_acl.main.id
+  rule_number    = 120
+  egress         = true
+  protocol       = "tcp"
+  rule_action    = "allow"
+  cidr_block     = "0.0.0.0/0"
+  from_port      = 53
+  to_port        = 53
+}
+
+# DNS outbound – UDP
+resource "aws_network_acl_rule" "egress_dns_udp" {
+  network_acl_id = aws_network_acl.main.id
+  rule_number    = 130
+  egress         = true
+  protocol       = "udp"
+  rule_action    = "allow"
+  cidr_block     = "0.0.0.0/0"
+  from_port      = 53
+  to_port        = 53
+}
+
+# Ephemeral ports outbound – required for stateless NACL return traffic
+# (covers TCP return packets for inbound SSH / DNS connections)
+resource "aws_network_acl_rule" "egress_ephemeral" {
+  network_acl_id = aws_network_acl.main.id
+  rule_number    = 140
+  egress         = true
+  protocol       = "tcp"
+  rule_action    = "allow"
+  cidr_block     = "0.0.0.0/0"
+  from_port      = 1024
+  to_port        = 65535
 }
 
 # NACL Ingress Rules
@@ -125,4 +176,14 @@ resource "aws_network_acl_rule" "ingress_dns_tcp" {
   to_port        = 53
 }
 
-
+# DNS ingress – UDP
+resource "aws_network_acl_rule" "ingress_dns_udp" {
+  network_acl_id = aws_network_acl.main.id
+  rule_number    = 120
+  egress         = false
+  protocol       = "udp"
+  rule_action    = "allow"
+  cidr_block     = "0.0.0.0/0"
+  from_port      = 53
+  to_port        = 53
+}
