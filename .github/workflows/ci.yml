@@ -127,3 +127,59 @@ jobs:
           name: tfplan-${{ matrix.module }}-${{ github.run_id }}
           path: ${{ matrix.module }}/tfplan.binary
           retention-days: 7
+
+  # ──────────────────────────────────────────────
+  # Job 3 – Terraform apply (matrix over all modules)
+  # Only runs on pushes to main (never on PRs).
+  # Applies the exact binary plan produced in Job 2.
+  # ──────────────────────────────────────────────
+  terraform-apply:
+    name: Terraform Apply – ${{ matrix.module }}
+    runs-on: ubuntu-latest
+    needs: terraform-plan          # gate: plan must pass first
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    strategy:
+      fail-fast: false             # apply remaining modules even if one fails
+      matrix:
+        module:
+          - bootstrap
+          - global
+          - iam
+          - network
+
+    environment: production        # ← manual gate: requires reviewer approval in GitHub Settings → Environments → production
+
+    permissions:
+      contents: read
+      id-token: write              # required for OIDC token exchange
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: github-actions-tf-apply
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init – ${{ matrix.module }}
+        working-directory: ${{ matrix.module }}
+        run: terraform init -input=false
+
+      - name: Download plan artifact – ${{ matrix.module }}
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan-${{ matrix.module }}-${{ github.run_id }}
+          path: ${{ matrix.module }}
+
+      - name: Terraform Apply – ${{ matrix.module }}
+        working-directory: ${{ matrix.module }}
+        run: terraform apply -input=false -auto-approve tfplan.binary
