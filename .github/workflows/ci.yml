@@ -146,8 +146,8 @@ jobs:
         module:
           - bootstrap
           - global
-          - iam
           - network
+          # iam excluded: ssoadmin resources require elevated permissions not held by GitHubActionsRole
 
     environment: production        # ← manual gate: requires reviewer approval in GitHub Settings → Environments → production
 

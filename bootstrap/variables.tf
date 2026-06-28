@@ -15,3 +15,15 @@ variable "dynamodb_table_name" {
   type        = string
   default     = "core-infra-terraform-state-locks"
 }
+
+variable "github_org" {
+  description = "GitHub organisation (or user) name that owns the repository. Used to scope the OIDC trust policy, e.g. 'my-org'."
+  type        = string
+  default     = "pgd988"
+}
+
+variable "github_repo" {
+  description = "GitHub repository name (without the org prefix). Used to scope the OIDC trust policy, e.g. 'terraform_aws_core_level'."
+  type        = string
+  default     = "terraform_aws_core_level"
+}
