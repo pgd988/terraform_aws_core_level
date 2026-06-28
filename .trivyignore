@@ -1,0 +1,17 @@
+# .trivyignore
+# Deliberate suppressions for findings that are accepted risks in this repository.
+# Each entry must include a justification comment explaining the decision.
+#
+# Format:
+#   AVD-ID [exp:YYYY-MM-DD]
+#   # Justification
+#
+# Docs: https://aquasecurity.github.io/trivy/latest/docs/configuration/filtering/#trivyignore
+
+# AWS-0104 – Security group egress unrestricted to 0.0.0.0/0
+# Resource: aws_vpc_security_group_egress_rule.all_outbound (network/security_groups.tf)
+# Justification: The core-default-sg is a shared baseline SG for internal VPC workloads.
+# Outbound traffic is intentionally unrestricted at the SG level; network-level egress
+# control is enforced via the NACL (network/vpc.tf) which restricts egress to
+# TCP 443, TCP/UDP 53, TCP 80, and ephemeral return ports only.
+AVD-AWS-0104
