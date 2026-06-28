@@ -27,3 +27,9 @@ variable "availability_zones" {
   type        = list(string)
   default     = ["eu-central-1a", "eu-central-1b"]
 }
+
+variable "enable_route53" {
+  description = "Whether to provision the private Route53 hosted zone"
+  type        = bool
+  default     = false
+}

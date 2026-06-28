@@ -1,0 +1,148 @@
+name: CI – Trivy Scan & Terraform Plan
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: write   # allows posting plan comments on PRs
+
+env:
+  AWS_REGION: eu-central-1
+  TF_VERSION: "1.9.8"
+  AWS_DEPLOY_ROLE_ARN: ""
+
+jobs:
+  # ──────────────────────────────────────────────
+  # Job 1 – Trivy IaC / config scan
+  # Fails the pipeline on any CRITICAL finding.
+  # ──────────────────────────────────────────────
+  trivy-scan:
+    name: Trivy Config Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy config scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: config
+          scan-ref: "."
+          # Fail only on CRITICAL severity findings
+          severity: CRITICAL
+          exit-code: "1"
+          format: table
+          # Scan all IaC-relevant files in the repo
+          skip-dirs: ".terraform,.git"
+
+      - name: Upload Trivy SARIF report
+        if: always()   # upload even when the scan fails so findings are visible
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: config
+          scan-ref: "."
+          severity: "CRITICAL,HIGH,MEDIUM,LOW"
+          exit-code: "0"          # don't fail again here
+          format: sarif
+          output: trivy-results.sarif
+          skip-dirs: ".terraform,.git"
+
+      - name: Upload SARIF to GitHub Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+
+  # ──────────────────────────────────────────────
+  # Job 2 – Terraform plan (matrix over all modules)
+  # Only runs when trivy-scan passes (no CRITs).
+  # ──────────────────────────────────────────────
+  terraform-plan:
+    name: Terraform Plan – ${{ matrix.module }}
+    runs-on: ubuntu-latest
+    needs: trivy-scan   # gate: only proceed if scan is clean
+
+    strategy:
+      fail-fast: false   # plan all modules even if one fails
+      matrix:
+        module:
+          - bootstrap
+          - global
+          - iam
+          - network
+
+    # Authenticate to AWS via OIDC – no long-lived keys stored in secrets.
+    # Prerequisites: create an IAM OIDC provider for GitHub and an IAM role
+    # that trusts this repo. Store the role ARN in the secret below.
+    permissions:
+      contents: read
+      id-token: write   # required for OIDC token exchange
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: github-actions-tf-plan
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init – ${{ matrix.module }}
+        working-directory: ${{ matrix.module }}
+        run: terraform init -input=false
+
+      - name: Terraform Validate – ${{ matrix.module }}
+        working-directory: ${{ matrix.module }}
+        run: terraform validate
+
+      - name: Terraform Plan – ${{ matrix.module }}
+        id: tf-plan
+        working-directory: ${{ matrix.module }}
+        run: |
+          terraform plan \
+            -input=false \
+            -no-color \
+            -out=tfplan.binary 2>&1 | tee plan.txt
+          echo "exitcode=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Post plan summary to PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          MODULE: ${{ matrix.module }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync(`${process.env.MODULE}/plan.txt`, 'utf8');
+            const truncated = plan.length > 60000
+              ? plan.substring(0, 60000) + '\n\n... (truncated)'
+              : plan;
+            const body = `## Terraform Plan – \`${process.env.MODULE}\`\n\`\`\`\n${truncated}\n\`\`\``;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body
+            });
+
+      - name: Upload plan artifact – ${{ matrix.module }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ matrix.module }}-${{ github.run_id }}
+          path: ${{ matrix.module }}/tfplan.binary
+          retention-days: 7
