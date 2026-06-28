@@ -33,3 +33,15 @@ variable "enable_route53" {
   type        = bool
   default     = false
 }
+
+variable "enable_vpc_flow_logs" {
+  description = "When true, enables VPC Flow Logs to CloudWatch for network traffic visibility (fixes Trivy AWS-0178). Incurs CloudWatch ingestion costs."
+  type        = bool
+  default     = false
+}
+
+variable "vpc_flow_logs_retention_days" {
+  description = "Number of days to retain VPC Flow Log records in CloudWatch. Lower values reduce cost."
+  type        = number
+  default     = 14
+}

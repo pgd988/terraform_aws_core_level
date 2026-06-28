@@ -41,25 +41,6 @@ jobs:
           format: table
           # Scan all IaC-relevant files in the repo
           skip-dirs: ".terraform,.git"
-
-      - name: Upload Trivy SARIF report
-        if: always()   # upload even when the scan fails so findings are visible
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          scan-type: config
-          scan-ref: "."
-          severity: "CRITICAL,HIGH,MEDIUM,LOW"
-          exit-code: "0"          # don't fail again here
-          format: sarif
-          output: trivy-results.sarif
-          skip-dirs: ".terraform,.git"
-
-      - name: Upload SARIF to GitHub Security tab
-        if: always()
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: trivy-results.sarif
-
   # ──────────────────────────────────────────────
   # Job 2 – Terraform plan (matrix over all modules)
   # Only runs when trivy-scan passes (no CRITs).
