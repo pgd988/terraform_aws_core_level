@@ -15,7 +15,7 @@ permissions:
 env:
   AWS_REGION: eu-central-1
   TF_VERSION: "1.9.8"
-  AWS_DEPLOY_ROLE_ARN: ""
+  AWS_DEPLOY_ROLE_ARN: "arn:aws:iam::308488463057:role/GitHubActionsRole"
 
 jobs:
   # ──────────────────────────────────────────────

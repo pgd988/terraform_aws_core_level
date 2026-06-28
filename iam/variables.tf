@@ -25,5 +25,5 @@ variable "github_org" {
 variable "github_repo" {
   description = "GitHub repository name (without the org prefix). Used to scope the OIDC trust policy, e.g. 'terraform_aws_core_level'."
   type        = string
-  default     = "terraform_gcp_core_level_infra"
+  default     = "terraform_aws_core_level"
 }
