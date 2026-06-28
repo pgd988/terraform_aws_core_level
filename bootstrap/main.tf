@@ -89,10 +89,10 @@ resource "aws_iam_role" "github_actions" {
   }
 }
 
-# Minimal permissions for Terraform plan/apply: state bucket + lock table +
-# read-only access to every service being managed by CI.
+# Permissions for GitHub Actions CI: state bucket + lock table +
+# read-only access for plan, write access for apply across all managed services.
 resource "aws_iam_role_policy" "github_actions_terraform" {
-  name = "TerraformPlanAccess"
+  name = "TerraformCIAccess"
   role = aws_iam_role.github_actions.id
 
   policy = jsonencode({
@@ -133,26 +133,24 @@ resource "aws_iam_role_policy" "github_actions_terraform" {
           "organizations:List*",
           "route53:Get*",
           "route53:List*",
+          "s3:Get*",
+          "s3:List*",
           "ssm:GetParameter*",
           "ssm:DescribeParameters",
           "ssm:ListTagsForResource",
-          "s3:GetBucketPolicy",
-          "s3:GetBucketVersioning",
-          "s3:GetBucketEncryption",
-          "s3:GetBucketPublicAccessBlock",
-          "s3:GetBucketLogging",
-          "s3:GetBucketTagging",
-          "s3:GetBucketRequestPayment",
-          "s3:GetBucketObjectLockConfiguration",
-          "s3:GetAccelerateConfiguration",
-          "s3:GetLifecycleConfiguration",
-          "s3:GetReplicationConfiguration",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "StateLockReadOnly"
+        Effect = "Allow"
+        Action = [
           "dynamodb:DescribeTable",
           "dynamodb:ListTagsOfResource",
           "dynamodb:DescribeTimeToLive",
           "dynamodb:DescribeContinuousBackups",
         ]
-        Resource = "*"
+        Resource = "arn:aws:dynamodb:${var.aws_region}:*:table/${var.dynamodb_table_name}"
       },
       {
         Sid    = "ApplyPermissions"
