@@ -126,18 +126,6 @@ resource "aws_network_acl" "main" {
 
 # NACL Egress Rules – explicit minimal set (replaces unrestricted all-protocol rule)
 
-# Allow all internal VPC traffic between subnets on egress (required for EKS node-to-node communication)
-resource "aws_network_acl_rule" "egress_vpc" {
-  network_acl_id = aws_network_acl.main.id
-  rule_number    = 90
-  egress         = true
-  protocol       = "-1"
-  rule_action    = "allow"
-  cidr_block     = var.vpc_cidr
-  from_port      = 0
-  to_port        = 0
-}
-
 # HTTPS outbound (AWS APIs, package repos, etc.)
 resource "aws_network_acl_rule" "egress_https" {
   network_acl_id = aws_network_acl.main.id
@@ -199,19 +187,31 @@ resource "aws_network_acl_rule" "egress_ephemeral" {
   to_port        = 65535
 }
 
-# NACL Ingress Rules
-
-# Allow all internal VPC traffic between subnets on ingress (required for EKS node-to-node and control-plane communication)
-resource "aws_network_acl_rule" "ingress_vpc" {
+# Ephemeral UDP ports outbound – required for UDP return traffic and CNI overlay networking
+resource "aws_network_acl_rule" "egress_ephemeral_udp" {
   network_acl_id = aws_network_acl.main.id
-  rule_number    = 90
-  egress         = false
-  protocol       = "-1"
+  rule_number    = 150
+  egress         = true
+  protocol       = "udp"
   rule_action    = "allow"
-  cidr_block     = var.vpc_cidr
-  from_port      = 0
-  to_port        = 0
+  cidr_block     = "0.0.0.0/0"
+  from_port      = 1024
+  to_port        = 65535
 }
+
+# NTP outbound (UDP 123) for node clock synchronization
+resource "aws_network_acl_rule" "egress_ntp" {
+  network_acl_id = aws_network_acl.main.id
+  rule_number    = 160
+  egress         = true
+  protocol       = "udp"
+  rule_action    = "allow"
+  cidr_block     = "0.0.0.0/0"
+  from_port      = 123
+  to_port        = 123
+}
+
+# NACL Ingress Rules
 
 resource "aws_network_acl_rule" "ingress_ssh" {
   network_acl_id = aws_network_acl.main.id
@@ -281,6 +281,30 @@ resource "aws_network_acl_rule" "ingress_http" {
   cidr_block     = "0.0.0.0/0"
   from_port      = 80
   to_port        = 80
+}
+
+# Ephemeral UDP ports ingress – required for UDP return traffic and CNI overlay networking
+resource "aws_network_acl_rule" "ingress_ephemeral_udp" {
+  network_acl_id = aws_network_acl.main.id
+  rule_number    = 160
+  egress         = false
+  protocol       = "udp"
+  rule_action    = "allow"
+  cidr_block     = "0.0.0.0/0"
+  from_port      = 1024
+  to_port        = 65535
+}
+
+# NTP ingress (UDP 123) for node clock synchronization return packets
+resource "aws_network_acl_rule" "ingress_ntp" {
+  network_acl_id = aws_network_acl.main.id
+  rule_number    = 170
+  egress         = false
+  protocol       = "udp"
+  rule_action    = "allow"
+  cidr_block     = "0.0.0.0/0"
+  from_port      = 123
+  to_port        = 123
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
