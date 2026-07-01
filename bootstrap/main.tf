@@ -176,3 +176,134 @@ resource "aws_iam_role_policy" "github_actions_terraform" {
     ]
   })
 }
+
+# ──────────────────────────────────────────────────────────────────────────────
+# GitHub Actions – IAM role for terraform_aws_platform_level
+# Same policy as the core-level role; scoped to the platform-level repository.
+# ──────────────────────────────────────────────────────────────────────────────
+
+resource "aws_iam_role" "github_actions_platform_level" {
+  name        = "GitHubActionsRole-platform-level"
+  description = "Assumed by GitHub Actions (pgd988/terraform_aws_platform_level) via OIDC"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Federated = aws_iam_openid_connect_provider.github_actions.arn
+        }
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Condition = {
+          StringEquals = {
+            "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+          }
+          StringLike = {
+            "token.actions.githubusercontent.com:sub" = "repo:${var.github_org}/${var.github_platform_repo}:*"
+          }
+        }
+      }
+    ]
+  })
+
+  tags = {
+    ManagedBy = "terraform"
+  }
+}
+
+resource "aws_iam_role_policy" "github_actions_terraform_platform_level" {
+  name = "TerraformCIAccess"
+  role = aws_iam_role.github_actions_platform_level.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "TerraformStateAccess"
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:ListBucket",
+        ]
+        Resource = [
+          "arn:aws:s3:::${var.state_bucket_name}",
+          "arn:aws:s3:::${var.state_bucket_name}/*",
+        ]
+      },
+      {
+        Sid    = "TerraformStateLock"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:DeleteItem",
+        ]
+        Resource = "arn:aws:dynamodb:${var.aws_region}:*:table/${var.dynamodb_table_name}"
+      },
+      {
+        Sid    = "ReadOnlyForPlan"
+        Effect = "Allow"
+        Action = [
+          "ec2:Describe*",
+          "iam:Get*",
+          "iam:List*",
+          "organizations:Describe*",
+          "organizations:List*",
+          "route53:Get*",
+          "route53:List*",
+          "s3:Get*",
+          "s3:List*",
+          "ssm:GetParameter*",
+          "ssm:DescribeParameters",
+          "ssm:ListTagsForResource",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "StateLockReadOnly"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:DescribeTable",
+          "dynamodb:ListTagsOfResource",
+          "dynamodb:DescribeTimeToLive",
+          "dynamodb:DescribeContinuousBackups",
+        ]
+        Resource = "arn:aws:dynamodb:${var.aws_region}:*:table/${var.dynamodb_table_name}"
+      },
+      {
+        Sid    = "ApplyPermissions"
+        Effect = "Allow"
+        Action = [
+          "cloudwatch:*",
+          "cloudtrail:*",
+          "xray:*",
+          "elasticache:*",
+          "rds:*",
+          "ec2:*",
+          "logs:*",
+          "elasticloadbalancing:*",
+          "acm:*",
+          "ssm:PutParameter",
+          "ssm:DeleteParameter",
+          "ssm:AddTagsToResource",
+          "ssm:RemoveTagsFromResource",
+          "route53:ChangeResourceRecordSets",
+          "route53:CreateHostedZone",
+          "route53:DeleteHostedZone",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "IAMFullAccess"
+        Effect = "Allow"
+        Action = [
+          "iam:*",
+        ]
+        Resource = "*"
+      },
+    ]
+  })
+}

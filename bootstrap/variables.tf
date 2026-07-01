@@ -27,3 +27,9 @@ variable "github_repo" {
   type        = string
   default     = "terraform_aws_core_level"
 }
+
+variable "github_platform_repo" {
+  description = "GitHub repository name for the platform-level repo (without the org prefix). Used to scope the OIDC trust policy, e.g. 'terraform_aws_platform_level'."
+  type        = string
+  default     = "terraform_aws_platform_level"
+}
