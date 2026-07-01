@@ -64,19 +64,53 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
-# Private Route Table (No NAT gateway defined by default to save costs unless requested)
+# Private Route Table
 resource "aws_route_table" "private" {
+  count  = var.single_nat_gateway || !var.enable_nat_gateway ? 1 : length(var.availability_zones)
   vpc_id = aws_vpc.main.id
 
   tags = {
-    Name = "core-private-rt"
+    Name = var.single_nat_gateway || !var.enable_nat_gateway ? "core-private-rt" : "core-private-rt-${var.availability_zones[count.index]}"
   }
 }
 
 resource "aws_route_table_association" "private" {
   count          = length(aws_subnet.private)
   subnet_id      = aws_subnet.private[count.index].id
-  route_table_id = aws_route_table.private.id
+  route_table_id = var.single_nat_gateway || !var.enable_nat_gateway ? aws_route_table.private[0].id : aws_route_table.private[count.index].id
+}
+
+# Elastic IP for NAT Gateway
+resource "aws_eip" "nat" {
+  count  = var.enable_nat_gateway ? (var.single_nat_gateway ? 1 : length(var.availability_zones)) : 0
+  domain = "vpc"
+
+  tags = {
+    Name = var.single_nat_gateway ? "core-nat-eip-${var.availability_zones[0]}" : "core-nat-eip-${var.availability_zones[count.index]}"
+  }
+
+  depends_on = [aws_internet_gateway.main]
+}
+
+# NAT Gateway (Provisions in public subnet eu-central-1a by default when single_nat_gateway = true)
+resource "aws_nat_gateway" "main" {
+  count         = var.enable_nat_gateway ? (var.single_nat_gateway ? 1 : length(var.availability_zones)) : 0
+  allocation_id = aws_eip.nat[count.index].id
+  subnet_id     = aws_subnet.public[count.index].id
+
+  tags = {
+    Name = var.single_nat_gateway ? "core-nat-gw-${var.availability_zones[0]}" : "core-nat-gw-${var.availability_zones[count.index]}"
+  }
+
+  depends_on = [aws_internet_gateway.main]
+}
+
+# Route for outbound internet access via NAT Gateway (enables private subnet nodes to reach EKS API)
+resource "aws_route" "private_nat_gateway" {
+  count                  = var.enable_nat_gateway ? (var.single_nat_gateway ? 1 : length(var.availability_zones)) : 0
+  route_table_id         = var.single_nat_gateway ? aws_route_table.private[0].id : aws_route_table.private[count.index].id
+  destination_cidr_block = "0.0.0.0/0"
+  nat_gateway_id         = aws_nat_gateway.main[count.index].id
 }
 
 # Network ACL
@@ -91,6 +125,18 @@ resource "aws_network_acl" "main" {
 }
 
 # NACL Egress Rules – explicit minimal set (replaces unrestricted all-protocol rule)
+
+# Allow all internal VPC traffic between subnets on egress (required for EKS node-to-node communication)
+resource "aws_network_acl_rule" "egress_vpc" {
+  network_acl_id = aws_network_acl.main.id
+  rule_number    = 90
+  egress         = true
+  protocol       = "-1"
+  rule_action    = "allow"
+  cidr_block     = var.vpc_cidr
+  from_port      = 0
+  to_port        = 0
+}
 
 # HTTPS outbound (AWS APIs, package repos, etc.)
 resource "aws_network_acl_rule" "egress_https" {
@@ -154,6 +200,19 @@ resource "aws_network_acl_rule" "egress_ephemeral" {
 }
 
 # NACL Ingress Rules
+
+# Allow all internal VPC traffic between subnets on ingress (required for EKS node-to-node and control-plane communication)
+resource "aws_network_acl_rule" "ingress_vpc" {
+  network_acl_id = aws_network_acl.main.id
+  rule_number    = 90
+  egress         = false
+  protocol       = "-1"
+  rule_action    = "allow"
+  cidr_block     = var.vpc_cidr
+  from_port      = 0
+  to_port        = 0
+}
+
 resource "aws_network_acl_rule" "ingress_ssh" {
   network_acl_id = aws_network_acl.main.id
   rule_number    = 100
@@ -186,6 +245,42 @@ resource "aws_network_acl_rule" "ingress_dns_udp" {
   cidr_block     = "0.0.0.0/0"
   from_port      = 53
   to_port        = 53
+}
+
+# Ephemeral ports ingress – required for return traffic from internet/AWS APIs via NAT Gateway
+resource "aws_network_acl_rule" "ingress_ephemeral" {
+  network_acl_id = aws_network_acl.main.id
+  rule_number    = 130
+  egress         = false
+  protocol       = "tcp"
+  rule_action    = "allow"
+  cidr_block     = "0.0.0.0/0"
+  from_port      = 1024
+  to_port        = 65535
+}
+
+# HTTPS ingress – required for traffic arriving at NAT Gateway from private subnets
+resource "aws_network_acl_rule" "ingress_https" {
+  network_acl_id = aws_network_acl.main.id
+  rule_number    = 140
+  egress         = false
+  protocol       = "tcp"
+  rule_action    = "allow"
+  cidr_block     = "0.0.0.0/0"
+  from_port      = 443
+  to_port        = 443
+}
+
+# HTTP ingress – required for package repositories and HTTP redirects via NAT Gateway
+resource "aws_network_acl_rule" "ingress_http" {
+  network_acl_id = aws_network_acl.main.id
+  rule_number    = 150
+  egress         = false
+  protocol       = "tcp"
+  rule_action    = "allow"
+  cidr_block     = "0.0.0.0/0"
+  from_port      = 80
+  to_port        = 80
 }
 
 # ──────────────────────────────────────────────────────────────────────────────

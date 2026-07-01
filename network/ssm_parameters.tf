@@ -25,3 +25,17 @@ resource "aws_ssm_parameter" "default_security_group_id" {
   value       = aws_security_group.default.id
   description = "Managed by Terraform. Default Security Group ID."
 }
+
+resource "aws_ssm_parameter" "private_route_tables" {
+  name        = "/infra/networking/private_route_tables"
+  type        = "StringList"
+  value       = join(",", aws_route_table.private[*].id)
+  description = "Managed by Terraform. Private Route Table IDs."
+}
+
+resource "aws_ssm_parameter" "nat_gateway_ids" {
+  name        = "/infra/networking/nat_gateway_ids"
+  type        = "StringList"
+  value       = join(",", aws_nat_gateway.main[*].id)
+  description = "Managed by Terraform. NAT Gateway IDs."
+}

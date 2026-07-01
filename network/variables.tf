@@ -28,6 +28,18 @@ variable "availability_zones" {
   default     = ["eu-central-1a", "eu-central-1b"]
 }
 
+variable "enable_nat_gateway" {
+  description = "Whether to provision NAT Gateway(s) for outbound internet access from private subnets (required for private EKS nodes)"
+  type        = bool
+  default     = true
+}
+
+variable "single_nat_gateway" {
+  description = "When true, provisions a single NAT Gateway in the first public subnet (eu-central-1a) shared across all private subnets to save costs. When false, provisions one NAT Gateway per availability zone."
+  type        = bool
+  default     = true
+}
+
 variable "enable_route53" {
   description = "Whether to provision the private Route53 hosted zone"
   type        = bool

@@ -91,11 +91,19 @@ Manages all core networking infrastructure in `eu-central-1`.
 | Resource | Purpose |
 |---|---|
 | VPC | `10.0.0.0/16` core VPC |
-| Public & Private Subnets | Spanning multiple Availability Zones |
-| Network ACLs | Inbound: TCP 22 (SSH) + TCP 53 (DNS) only. Outbound: all permitted. |
+| Public & Private Subnets | Spanning multiple Availability Zones (`eu-central-1a`, `eu-central-1b`) |
+| NAT Gateway & EIP | Outbound internet access for private subnets (enables private EKS node registration) |
+| Network ACLs | Restricts subnet egress and ingress with rules allowing SSH, DNS, HTTP/HTTPS, ephemeral return traffic, and intra-VPC communication |
 | Security Group – `core-default-sg` | Inbound SSH/DNS, outbound internet |
 | Route53 Private Zone | `.local` hosted zone attached to the VPC |
-| SSM Parameters | Exports VPC ID, Subnet IDs, and SG ID to `/infra/networking/*` for downstream consumption |
+| SSM Parameters | Exports VPC ID, Subnet IDs, Route Table IDs, NAT Gateway IDs, and SG ID to `/infra/networking/*` |
+
+**Feature toggles**
+
+| Variable | Default | Description |
+|---|---|---|
+| `enable_nat_gateway` | `true` | Provisions NAT Gateway(s) for outbound internet access from private subnets. |
+| `single_nat_gateway` | `true` | Provisions a single NAT Gateway in `eu-central-1a` shared across all private subnets to save costs. Set to `false` for 1 NAT Gateway per AZ. |
 
 ---
 
