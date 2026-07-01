@@ -287,6 +287,7 @@ resource "aws_iam_role_policy" "github_actions_terraform_platform_level" {
           "elasticloadbalancing:*",
           "acm:*",
           "kms:*",
+          "eks:*",
           "ssm:PutParameter",
           "ssm:DeleteParameter",
           "ssm:AddTagsToResource",
